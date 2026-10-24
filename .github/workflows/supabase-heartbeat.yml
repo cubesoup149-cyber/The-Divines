@@ -1,0 +1,45 @@
+# THE DIVINES — Supabase Storage heartbeat.
+#
+# Every 2 hours: delete the ONE dedicated heartbeat image
+# (heartbeat/divines-heartbeat.png in the "image" bucket) and upload it again.
+# It never touches people's uploads (profiles/, chat/, dm/) and never uses any other
+# project's credentials. All logic lives in .github/heartbeat/heartbeat.sh.
+#
+# Needs ONE repository secret (Settings → Secrets and variables → Actions):
+#   DIVINES_SUPABASE_PUBLISHABLE_KEY = the same publishable key that is in config.js
+#   (SUPABASE_PUBLISHABLE_KEY). It is the key the website already uses, so it can only
+#   do what the bucket's Storage policies allow. Do NOT use another project's key.
+name: Supabase heartbeat
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"   # every 2 hours, on the hour (UTC)
+  workflow_dispatch:         # "Run workflow" button in the Actions tab
+
+permissions:
+  contents: read
+
+# Never let two heartbeats overlap (a delete must not race another run's upload).
+concurrency:
+  group: divines-supabase-heartbeat
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      # Verified from the project's config.js — public values, not secrets.
+      SUPABASE_URL: https://xjzkcexvzwpiezvhmdeo.supabase.co
+      SUPABASE_BUCKET: image
+      HEARTBEAT_PATH: heartbeat/divines-heartbeat.png
+      HEARTBEAT_FILE: .github/heartbeat/divines-heartbeat.png
+      # The only credential, from a GitHub Secret.
+      SUPABASE_KEY: ${{ secrets.DIVINES_SUPABASE_PUBLISHABLE_KEY }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Delete the previous heartbeat image, upload it again, verify
+        run: bash .github/heartbeat/heartbeat.sh
+        
